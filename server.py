@@ -1,5 +1,3 @@
-
-#!/usr/bin/env python3
 """
 Wyoming Protocol Server Test
 
@@ -12,11 +10,24 @@ pip3 install numpy
 
 pip3 install Wyoming
 
+
+
+download silero-vad
+https://k2-fsa.github.io/sherpa/onnx/vad/silero-vad.html#download-models-files
+
+silero_vad.onnx exported by k2-fsa
+
+or
+
+silero_vad v5
+
+
 step 2. server.py
 
 from funasr_onnx import SenseVoiceSmall
 
 """
+
 import os
 import asyncio
 import io
@@ -47,6 +58,8 @@ from wyoming.info import (
 from wyoming.server import AsyncTcpServer, AsyncEventHandler
 
 
+# ---------------- 1. 日志设置 ----------------
+
 # ---------------- Logging ----------------
 logging.basicConfig(
     level=logging.INFO,
@@ -54,6 +67,9 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 _LOGGER = logging.getLogger("wyoming-funasr-onnx stt server")
+
+
+
 
 _LOGGER.info(f"========== Runtime Environment ==========")
 
@@ -80,7 +96,6 @@ _LOGGER.info(f"Numpy  Version: {np.__version__}")
 _LOGGER.info(f"========================================")
 
 
-
 # ---------------- 2. 初始化 Sherpa-ONNX----------------
 # 在脚本启动时加载一次，确保响应速度
 # --------------------------------
@@ -91,10 +106,12 @@ _LOGGER.info("%s - start excute sherpa-onnx" % datetime.datetime.now().strftime(
 # load model
 start_model = time.time()
 
+# 检查模型文件
+# 模型文件路径
 # 请确保路径指向你下载的模型文件夹
-# /data/models
-MODEL_DIR = "/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2025-09-09"
-# MODEL_DIR = "/funasr-wyoming-sherpa-onnx/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2025-09-09"
+# Local path to VAD model or models
+# MODEL_DIR = "/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2025-09-09"
+MODEL_DIR = "/funasr-wyoming-sherpa-onnx/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2025-09-09"
 
 def create_recognizer():
     _LOGGER.info(f"Loading Sherpa-ONNX model from {MODEL_DIR}")
@@ -134,13 +151,16 @@ class CustomSTTHandler(AsyncEventHandler):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.audio_buffer = bytearray()
 
-        # 推理完成标志
+        # Audio buffer management
+        self.audio_buffer = bytearray()
+        self.sample_rate = 16000
+        self.sample_width = 2  # 16-bit
+        self.channels = 1  # mono
+
         self.processed = False
-        
         # 1. 初始化 VAD (使用 sherpa_onnx 内置的 Silero VAD)
-        # 需确保 MODEL_DIR 下有 silero_vad.onnx
+        # Download Silero VAD ONNX model -需确保 MODEL_DIR 下有 silero_vad.onnx  
  
 
         # ---add vad： step 1. 初始化 VAD 配置 (针对 1.12.23 API) ---
@@ -171,8 +191,10 @@ class CustomSTTHandler(AsyncEventHandler):
         # _LOGGER.info(f"Received event type: {event.type}")
 
         # 1. Handle service discovery 
+        """Create Wyoming service info for discovery"""
         if Describe.is_type(event.type):
-            _LOGGER.info("Describe request received：Received Describe event from client")
+        
+            _LOGGER.info("Describe event received：Received Describe event from client")
         
             
             print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} - Describe request received：Received Describe event from ha client")
@@ -199,25 +221,64 @@ class CustomSTTHandler(AsyncEventHandler):
                   supports_transcript_streaming=False,
              )
 
-   
+            _LOGGER.info("Describe event received：send  wyoming info to ha client")
             info = Info(asr=[asr_program])
             await self.write_event(info.event())
             return True
 
-        # 2. Handle audio stream start
+
+        # Handle transcription requests
+        if Transcribe.is_type(event.type):
+            _LOGGER.info("Transcribe Event received.ha客户端请求识别为文字...")
+            transcribe = Transcribe.from_event(event)
+            _LOGGER.info(f"Transcription received: language={transcribe.language}") 
+            return True
+
+        # 1. Audio Start ---Handle audio stream start
+        """
+        ha client → audio-start (required)
+        {
+           "type": "audio.start",
+           "rate": 16000,
+            "width": 2,
+            "channels": 1
+         }
+
+        """
         if AudioStart.is_type(event.type):
             _LOGGER.info("AudioStart received")
+
+            audio_start = AudioStart.from_event(event)
+            self.sample_rate = audio_start.rate
+            self.sample_width = audio_start.width
+            self.channels = audio_start.channels
+           
+            _LOGGER.info(f"AudioStart event received: rate:{self.sample_rate}Hz, with:{self.sample_width}B,channels: {self.channels}ch")
  
             self.audio_buffer.clear()
 
-            # 推理完成标志
+            # add vad: step 2
+            self.was_speaking = False
             self.processed = False
             self.vad.reset()
  
             return True
 
-        # 3. Handle audio data chunks
+        # 2. Real-time Audio Processing & Endpointing --Handle audio data chunks
+        """
+        ha client → AudioChunk (required)
+        AudioChunk(
+            audio=bytes,
+            rate=16000,
+            width=2,
+            channels=1
+        ）
+
+        """
         if AudioChunk.is_type(event.type):
+            # -------------------------------
+            # # Process audio chunk - 提取 Wyoming AudioChunk
+            # ------------------------------- 
             chunk = AudioChunk.from_event(event)
             self.audio_buffer.extend(chunk.audio)
 
@@ -225,7 +286,8 @@ class CustomSTTHandler(AsyncEventHandler):
             if len(self.audio_buffer) % 48000 == 0:
                 _LOGGER.info(f"AudioChunk Event received.正在接收音频... 已累积 {len(self.audio_buffer)/32000:.1f} 秒")
 
-            # 转换音频供 VAD 检查
+
+            #  int16 → float32 (转换音频供 VAD 检查)
             audio_f32 = np.frombuffer(chunk.audio, dtype=np.int16).astype(np.float32) / 32768.0
             
             # 喂给 VAD
@@ -243,22 +305,26 @@ class CustomSTTHandler(AsyncEventHandler):
                 # 如果检测到用户停止说话，主动发送一个 AudioStop 事件来触发最终识别结果返回
                 # await self.write_event(AudioStop().event())
            
-            
-            currently_speaking = self.vad.is_speech_detected()
+          
 
-            # _LOGGER.info(f"Speech State: {currently_speaking}")
+           # Check for speech using VAD
+            currently_audio_chunk_is_speaking = self.vad.is_speech_detected()
 
-            if currently_speaking:
+            # _LOGGER.info(f"Speech State: {currently_audio_chunk_is_speaking}")
+
+            if currently_audio_chunk_is_speaking:
                  if not self.was_speaking:
                       _LOGGER.info("User Started speaking!")
                       self.was_speaking = True
             else:
-                  if not currently_speaking and self.was_speaking:
+                  if not currently_audio_chunk_is_speaking and self.was_speaking:
                         _LOGGER.info("User stopped speaking.")
                         # This is where you would trigger your STT or GPT response
-                        stop_event = AudioStop().event()
-                        await self.handle_event(stop_event)
-                      
+
+                        # sending AudioStop event - VAD 检测到停止说话后不等客户端发送 Stop 信号就直接开始识别：
+                        await self.write_event(AudioStop().event())
+
+                        # reset 状态
                         self.was_speaking = False
                         self.vad.reset()  # Optional: clear the buffer for the next sentence
 
@@ -282,13 +348,14 @@ class CustomSTTHandler(AsyncEventHandler):
 
 
             if self.speech_detected_counter >0 and self.speech_detected_counter % 10 == 0:
-                  _LOGGER.info(f"AudioChunk Event received.人声已累积 {self.speech_detected_counter} 个")            
+                  _LOGGER.info(f"AudioChunk Event received.人声已累积 {self.speech_detected_counter} 个")
+
   
             return True
 
 
  # ---------------- AudioStop (Optimized with NumPy) ----------------
-        # 4. Handle audio stream end
+        # 2. Handle audio stream end
         if AudioStop.is_type(event.type):
             _LOGGER.info(f"AudioStop Event received.Processing {len(self.audio_buffer)} bytes of audio...")
    
@@ -317,7 +384,7 @@ class CustomSTTHandler(AsyncEventHandler):
                     result_text = re.sub(r'<\|.*?\|>', '', result_text).strip()
                 else:
                     result_text = ""
-                    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} - 接收到的音频为空...")     
+                    print(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} - 接收到的音频为空...")     
           
                 _LOGGER.info(f"识别结果 Result: {result_text}")
                
@@ -333,11 +400,6 @@ class CustomSTTHandler(AsyncEventHandler):
 
         return True
 
-        # Handle transcription requests
-        if Transcribe.is_type(event.type):
-            _LOGGER.info("Transcribe Event received.ha客户端请求识别为文字...")
-  
-            return True
 
 
 async def main():
