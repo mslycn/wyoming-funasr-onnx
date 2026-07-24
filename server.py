@@ -110,8 +110,8 @@ start_model = time.time()
 # 模型文件路径
 # 请确保路径指向你下载的模型文件夹
 # Local path to VAD model or models
-# MODEL_DIR = "/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2025-09-09"
-MODEL_DIR = "/funasr-wyoming-sherpa-onnx/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2025-09-09"
+MODEL_DIR = "/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2025-09-09"
+# MODEL_DIR = "/funasr-wyoming-sherpa-onnx/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2025-09-09"
 
 def create_recognizer():
     _LOGGER.info(f"Loading Sherpa-ONNX model from {MODEL_DIR}")
