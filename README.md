@@ -152,6 +152,8 @@ Inference  Framework
 
 Start using wyoming-funasr-onnx stt server in your home assistant.
 
+Because Home Assistant Container (the Docker version) lacks the Add-on（app） store found in HA OS, you must deploy it as its own standalone Docker container alongside your HA container.
+
 step 1. Pull the Docker Image 
 ~~~
 docker pull ghcr.io/mslycn/wyoming-sherpa-onnx:latest
