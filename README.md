@@ -263,6 +263,8 @@ pip3 install numpy==2.4.2
 
 useful links
 
+**ASR Engine**
+
 Install the Python package sherpa-onnx 
 
 https://k2-fsa.github.io/sherpa/onnx/python/install.html#method-1-from-pre-compiled-wheels-cpu-only
@@ -271,6 +273,7 @@ https://k2-fsa.github.io/sherpa/onnx/python/install.html#method-1-from-pre-compi
 
 https://github.com/k2-fsa/sherpa-onnx/releases
 
+**ASR Model**
 
 - download model (sense-voice small)
 
@@ -282,6 +285,7 @@ https://k2-fsa.github.io/sherpa/onnx/sense-voice/index.html
 
 https://k2-fsa.github.io/sherpa/onnx/vad/silero-vad.html#download-models-files
 
+**Wyoming protocol**
 
 https://github.com/mawwalker/stt-server
 
