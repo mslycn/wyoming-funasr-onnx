@@ -198,6 +198,10 @@ Note
 
 SenseVoice开源模型是多语言音频理解模型，具有包括语音识别、语种识别、语音情感识别，声学事件检测能力。
 
+SenseVoiceSmall: 是阿里巴巴开源的语音大模型 SenseVoice 的轻量化版本
+
+
+
 3. sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2025-09-09 - SenseVoiceSmall FP32 onnx模型
 
 SenseVoiceSmall 官方模型来源
@@ -207,6 +211,10 @@ https://k2-fsa.github.io/sherpa/onnx/sense-voice/index.html
 Note
 
 模型说明: SenseVoiceSmall 模型来自 FunAudioLLM/SenseVoice 项目，已转换为 ONNX 格式用于 sherpa-onnx
+
+FP32 代表单精度浮点数（32-bit Floating-Point），该模型保留了原始全精度的权重数据，没有经过 INT8 或 FP16 等低比特量化（Quantization）处理。不是量化版本。
+
+onnx: 说明模型已被导出为 ONNX（Open Neural Network Exchange）格式
 
 2.download
 
